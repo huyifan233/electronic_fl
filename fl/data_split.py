@@ -4,8 +4,9 @@ from sklearn.preprocessing import StandardScaler
 
 
 TRAIN_DATA_LEN = 54000
-DATA_PATH_WIN_ROOT = "C:\\Users\\yifanhu\\Documents\\"
-DATA_PATH_WIN = "C:\\Users\\yifanhu\\Documents\\smart_grid_stability_augmented.csv"
+DATA_PATH_WIN_ROOT = "C:\\Users\\tchennech\\Documents\\electronic_fl\\"
+
+DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\smart_grid_stability_augmented.csv"
 DATA_PATH = "/home/chunxin.hyf/smart_grid_stability_augmented.csv"
 
 

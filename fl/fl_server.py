@@ -3,8 +3,8 @@ import time
 import torch
 from fl.fl_model import Net
 
-GLOBAL_DIR = "../global_model_dir/"
-LOCAL_DIR = "../local_model_dir/"
+GLOBAL_DIR = "./global_model_dir/"
+LOCAL_DIR = "./local_model_dir/"
 
 def init_global_model(idx):
     init_global_model_path = GLOBAL_DIR + "global_model_{}".format(idx)
@@ -28,12 +28,19 @@ def main():
     idx = 0
     init_global_model(idx)
     idx += 1
+    print("Start Aggregating Server")
     while True:
         latest_model_paths = []
         is_ok = True
+        if len(os.listdir(LOCAL_DIR)) == 0:
+            is_ok = False
+            continue
         for file in os.listdir(LOCAL_DIR):
             if os.path.isdir(file):
                 file_list = sorted(os.listdir(file))
+                if len(file_list) == 0:
+                    is_ok = False
+                    break
                 if len(latest_model_paths) == 0:
                     latest_model_paths.append(file_list[-1])
                 elif latest_model_paths[-1] != file_list[-1]:
