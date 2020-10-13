@@ -2,14 +2,11 @@ import os
 import pandas as pd
 import torch
 import time
-from torch.utils.data import DataLoader
 import numpy as np
 import torch.nn.functional as F
-from electronic_dataset import ElectronicDataset
-from electronic_model import Net
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
-
+from fl.fl_model import Net
 
 
 CLIENT_ID = 0
@@ -18,32 +15,36 @@ LOCAL_DIR = "./local_model_dir/{}/".format(CLIENT_ID)
 if not os.path.exists(LOCAL_DIR):
     os.mkdir(LOCAL_DIR)
 
-DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\smart_grid_stability_augmented.csv"
-DATA_PATH = "/home/chunxin.hyf/smart_grid_stability_augmented.csv"
-TRAIN_DATA_LEN = 54000
+DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\train_data_0.csv"
+TEST_DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\test_data.csv"
+DATA_PATH = "/home/chunxin.hyf/train_data_0_noniid.csv"
+TRAIN_DATA_LEN = 38200
+TEST_DATA_LEN = 6000
 BATCH_SIZE = 32
 EPOCH = 50
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.001
 
 def load_dataset():
     data = pd.read_csv(DATA_PATH_WIN)
-    map1 = {'unstable': 0, 'stable': '1'}
-    data['stabf'] = data['stabf'].replace(map1)
+    test_data = pd.read_csv(TEST_DATA_PATH_WIN)
+    # map1 = {'unstable': 0, 'stable': 1}
+    # data['stabf'] = data['stabf'].replace(map1)
     data = data.sample(frac=1)
+    test_data = test_data.sample(frac=1)
     # data2 = data
     # f_most_correlated = data.corr().nlargest(14, 'stabf')['stabf'].index
     # print(data2.corr())
 
-
+    test_X = test_data.iloc[:, :12]
+    test_Y = test_data.iloc[:, 13]
     X = data.iloc[:, :12]
     Y = data.iloc[:, 13]
 
-    print(X.head())
     X_train = X.iloc[:TRAIN_DATA_LEN, :]
     Y_train = Y.iloc[:TRAIN_DATA_LEN]
 
-    X_test = X.iloc[TRAIN_DATA_LEN:, :]
-    Y_test = Y.iloc[TRAIN_DATA_LEN:]
+    X_test = test_X.iloc[:TEST_DATA_LEN, :]
+    Y_test = test_Y.iloc[:TEST_DATA_LEN]
     X_train = X_train.values
     Y_train = Y_train.values
     X_test = X_test.values
@@ -62,9 +63,10 @@ def load_dataset():
     Y_test = torch.from_numpy(np.array(Y_test, dtype=np.float32))
     return X_train, Y_train, X_test, Y_test
 
-def train(x_train, y_train, model, optimizer):
+def train(x_train, y_train, model):
 
     model.train()
+    optimizer = torch.optim.Adam(model.parameters())
     for _ in range(EPOCH):
         pred = model(x_train)
         pred = pred.resize(pred.size()[0])
@@ -74,7 +76,6 @@ def train(x_train, y_train, model, optimizer):
         optimizer.step()
 
 def validate(x_val, y_val, model):
-    model.eval()
     pred_val = model(x_val)
     pred_val = pred_val.resize(pred_val.size()[0])
     loss_val = F.binary_cross_entropy(pred_val, y_val)
@@ -98,16 +99,21 @@ def test(x_test, y_test, model):
 def load_global_model(epoch):
 
     global_model_path = GLOBAL_DIR + "global_model_{}".format(epoch)
-    print("Load global model: {}".format(global_model_path))
-    model = torch.load(global_model_path)
-    return model
+    if os.path.exists(global_model_path):
+        print("Load global model: {}".format(global_model_path))
+        time.sleep(0.5)
+        model_pars = torch.load(global_model_path)
+        model = Net()
+        model.load_state_dict(model_pars)
+        return model
+    return None
 
 
-def save_local_model(epoch, model):
+def save_local_model_pars(epoch, model_pars):
 
     save_local_model_path = LOCAL_DIR + "local_model_{}".format(epoch)
     print("Save local model: {}".format(save_local_model_path))
-    torch.save(model, save_local_model_path)
+    torch.save(model_pars, save_local_model_path)
 
 
 def main():
@@ -117,26 +123,25 @@ def main():
 
     # model = Net()
     # optimizer = torch.optim.Adam(model.parameters())
-    time.sleep(5)
-    idx = 1
+
     out = 0
-    for _ in range(10):
-        model = load_global_model(idx - 1)
+    while(out < 10):
+        model = load_global_model(out)
         if model is not None:
             for train_index, val_index in KFold(10, shuffle=True, random_state=10).split(X_train):
-                optimizer = torch.optim.Adam(model.parameters())
                 x_train, x_val = X_train[train_index], X_train[val_index]
                 y_train, y_val = Y_train[train_index], Y_train[val_index]
-                train(x_train, y_train, model, optimizer)
-                acc, loss = validate(x_val, y_val, model)
-                print("epoch: {}, val_loss: {}, val_accuracy: {}".format(idx, loss, acc))
-                save_local_model(idx, model)
-                idx += 1
+                train(x_train, y_train, model)
+                acc, loss = validate(X_test, Y_test, model)
+            print("epoch: {}, test_loss: {}, test_accuracy: {}".format(out, loss, acc))
+            save_local_model_pars(out, model.state_dict())
             out += 1
 
-
-    # loss, acc = test(X_test, Y_test, model)
-    # print("test_loss: {}, test accuracy: {}".format(loss, acc))
+    while load_global_model(out) is None:
+        pass
+    final_global_model = load_global_model(out)
+    loss, acc = test(X_test, Y_test, final_global_model)
+    print("test_loss: {}, test accuracy: {}".format(loss, acc))
 
 if __name__ == "__main__":
     main()

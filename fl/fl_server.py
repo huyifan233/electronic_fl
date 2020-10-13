@@ -5,21 +5,30 @@ from fl.fl_model import Net
 
 GLOBAL_DIR = "./global_model_dir/"
 LOCAL_DIR = "./local_model_dir/"
+CLIENT_NUM = 2
+
+if not os.path.exists(LOCAL_DIR):
+    os.mkdir(LOCAL_DIR)
+
+if not os.path.exists(GLOBAL_DIR):
+    os.mkdir(GLOBAL_DIR)
 
 def init_global_model(idx):
     init_global_model_path = GLOBAL_DIR + "global_model_{}".format(idx)
     model = Net()
-    torch.save(model, init_global_model_path)
+    torch.save(model.state_dict(), init_global_model_path)
 
 def aggregate(latest_model_paths, idx):
-    model = torch.load(latest_model_paths[0])
-    for key in model.keys():
+
+    other_model_pars = [torch.load(path) for path in latest_model_paths]
+    model_pars = other_model_pars[0]
+    for key in model_pars.keys():
         for i in range(1, len(latest_model_paths)):
-            other_model = torch.load(latest_model_paths[i])
-            model[key] += other_model[i][key]
-        model[key] = torch.div(model[key], len(latest_model_paths))
+            model_pars[key] += other_model_pars[i][key]
+        model_pars[key] = torch.div(model_pars[key], len(latest_model_paths))
+    # new_model.load_state_dict(model_pars)
     aggregated_model_path = GLOBAL_DIR + "global_model_{}".format(idx)
-    torch.save(model, aggregated_model_path)
+    torch.save(model_pars, aggregated_model_path)
 
 
 
@@ -29,25 +38,20 @@ def main():
     init_global_model(idx)
     idx += 1
     print("Start Aggregating Server")
+
     while True:
         latest_model_paths = []
-        is_ok = True
-        if len(os.listdir(LOCAL_DIR)) == 0:
-            is_ok = False
-            continue
         for file in os.listdir(LOCAL_DIR):
-            if os.path.isdir(file):
-                file_list = sorted(os.listdir(file))
-                if len(file_list) == 0:
-                    is_ok = False
+            file_path = LOCAL_DIR + file
+            if os.path.isdir(file_path):
+                file_list = sorted(os.listdir(file_path), key=lambda x: os.path.getmtime(os.path.join(file_path, x)))
+                if len(file_list) == 0 or file_list[-1].split("_")[-1] != str("{}".format(idx-1)):
                     break
-                if len(latest_model_paths) == 0:
-                    latest_model_paths.append(file_list[-1])
-                elif latest_model_paths[-1] != file_list[-1]:
-                    is_ok = False
-                    break
+                latest_model_path = os.path.join(file_path, file_list[-1])
+                latest_model_paths.append(latest_model_path)
 
-        if is_ok:
+        if len(latest_model_paths) == CLIENT_NUM:
+            print("Execute {} aggregation...".format(idx))
             aggregate(latest_model_paths, idx)
             idx += 1
         else:
