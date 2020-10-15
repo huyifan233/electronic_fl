@@ -16,7 +16,7 @@ if not os.path.exists(LOCAL_DIR):
     os.mkdir(LOCAL_DIR)
 
 TEST_DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\test_data.csv"
-DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\train_data_0.csv"
+DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\train_data_0_noniid.csv"
 DATA_PATH = "/home/chunxin.hyf/train_data_0.csv"
 TRAIN_DATA_LEN = 27000
 TEST_DATA_LEN = 6000
@@ -76,7 +76,7 @@ def train(x_train, y_train, model, optimizer):
         optimizer.step()
 
 def validate(x_val, y_val, model):
-
+    model.eval()
     pred_val = model(x_val)
     pred_val = pred_val.resize(pred_val.size()[0])
     loss_val = F.binary_cross_entropy(pred_val, y_val)

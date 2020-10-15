@@ -10,15 +10,15 @@ from fl.fl_model import Net
 
 
 CLIENT_ID = 1
-GLOBAL_DIR = "./global_model_dir/"
-LOCAL_DIR = "./local_model_dir/{}/".format(CLIENT_ID)
+GLOBAL_DIR = "./global_model_dir"
+LOCAL_DIR = os.path.join("./local_model_dir", str(CLIENT_ID))
 if not os.path.exists(LOCAL_DIR):
     os.mkdir(LOCAL_DIR)
 
 TEST_DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\test_data.csv"
-DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\train_data_1.csv"
+DATA_PATH_WIN = "C:\\Users\\tchennech\\Documents\\electronic_fl\\train_data_1_noniid.csv"
 DATA_PATH = "/home/chunxin.hyf/train_data_1.csv"
-TRAIN_DATA_LEN = 21700
+TRAIN_DATA_LEN = 27000
 TEST_DATA_LEN = 6000
 BATCH_SIZE = 32
 EPOCH = 50
@@ -58,10 +58,9 @@ def load_dataset():
     # return X_train, Y_train, X_test, Y_test
     return X_train, Y_train, X_test, Y_test
 
-def train(x_train, y_train, model):
+def train(x_train, y_train, model, optimizer):
 
     model.train()
-    optimizer = torch.optim.Adam(model.parameters())
     for _ in range(EPOCH):
         pred = model(x_train)
         pred = pred.resize(pred.size()[0])
@@ -71,6 +70,7 @@ def train(x_train, y_train, model):
         optimizer.step()
 
 def validate(x_val, y_val, model):
+    model.eval()
     pred_val = model(x_val)
     pred_val = pred_val.resize(pred_val.size()[0])
     loss_val = F.binary_cross_entropy(pred_val, y_val)
@@ -93,7 +93,7 @@ def test(x_test, y_test, model):
 
 def load_global_model(epoch):
 
-    global_model_path = GLOBAL_DIR + "global_model_{}".format(epoch)
+    global_model_path = os.path.join(GLOBAL_DIR, "global_model_{}".format(epoch))
     if os.path.exists(global_model_path):
         print("Load global model: {}".format(global_model_path))
         time.sleep(0.5)
@@ -105,7 +105,7 @@ def load_global_model(epoch):
 
 
 def save_local_model_pars(epoch, model_pars):
-    save_local_model_path = LOCAL_DIR + "local_model_{}".format(epoch)
+    save_local_model_path = os.path.join(LOCAL_DIR, "local_model_{}".format(epoch))
     print("Save local model: {}".format(save_local_model_path))
     torch.save(model_pars, save_local_model_path)
 
@@ -122,12 +122,13 @@ def main():
     while(out < 10):
         model = load_global_model(out)
         if model is not None:
+            optimizer = torch.optim.Adam(model.parameters())
             for train_index, val_index in KFold(10, shuffle=True, random_state=10).split(X_train):
                 x_train, x_val = X_train[train_index], X_train[val_index]
                 y_train, y_val = Y_train[train_index], Y_train[val_index]
-                train(x_train, y_train, model)
-                acc, loss = validate(X_test, Y_test, model)
-            print("epoch: {}, test_loss: {}, test_accuracy: {}".format(out, loss, acc))
+                train(x_train, y_train, model, optimizer)
+                acc, loss = validate(x_val, y_val, model)
+            print("epoch: {}, val_loss: {}, val_accuracy: {}".format(out, loss, acc))
             save_local_model_pars(out, model.state_dict())
             out += 1
 
